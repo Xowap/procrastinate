@@ -8,6 +8,7 @@ from collections.abc import Iterable, Iterator
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     TypedDict,
 )
 
@@ -34,6 +35,13 @@ class WorkerOptions(TypedDict):
     delete_jobs: NotRequired[str | jobs.DeleteJobCondition]
     additional_context: NotRequired[dict[str, Any]]
     install_signal_handlers: NotRequired[bool]
+    hook_before_job: NotRequired[Callable[[], None]]
+    hook_after_job: NotRequired[
+        Callable[
+            [type[BaseException] | None, BaseException | None, Any | None],
+            None,
+        ]
+    ]
 
 
 class App(blueprints.Blueprint):

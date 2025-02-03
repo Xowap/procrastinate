@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from django import apps
+from django.db import close_old_connections, reset_queries
 from django.utils import module_loading
 
 import procrastinate
@@ -34,14 +35,31 @@ def get_import_paths() -> Iterable[str]:
     yield from settings.settings.IMPORT_PATHS
 
 
+def before_job() -> None:
+    close_old_connections()
+    reset_queries()
+
+
+def after_job(exc_type, exc_value, traceback) -> None:
+    close_old_connections()
+    reset_queries()
+
+
 def create_app(blueprint: procrastinate.Blueprint) -> procrastinate.App:
     connector = django_connector.DjangoConnector(
         alias=settings.settings.DATABASE_ALIAS,
     )
+
+    worker_defaults = dict(
+        hook_before_job=before_job,
+        hook_after_job=after_job,
+        **(settings.settings.WORKER_DEFAULTS or {}),
+    )
+
     app = procrastinate.App(
         connector=connector,
         import_paths=list(get_import_paths()),
-        worker_defaults=settings.settings.WORKER_DEFAULTS,
+        worker_defaults=worker_defaults,
         periodic_defaults=settings.settings.PERIODIC_DEFAULTS,
     )
 

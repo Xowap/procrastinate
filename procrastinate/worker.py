@@ -45,6 +45,12 @@ class Worker:
         delete_jobs: str | jobs.DeleteJobCondition | None = None,
         additional_context: dict[str, Any] | None = None,
         install_signal_handlers: bool = True,
+        hook_before_job: Callable[[], None] | None = None,
+        hook_after_job: Callable[
+            [type[BaseException] | None, BaseException | None, Any | None],
+            None,
+        ]
+        | None = None,
     ):
         self.app = app
         self.queues = queues
@@ -61,6 +67,8 @@ class Worker:
         ) or jobs.DeleteJobCondition.NEVER
         self.additional_context = additional_context
         self.install_signal_handlers = install_signal_handlers
+        self.hook_before_job = hook_before_job
+        self.hook_after_job = hook_after_job
 
         if self.worker_name:
             self.logger = logger.getChild(self.worker_name)
@@ -227,6 +235,9 @@ class Worker:
                 ),
             )
 
+            if self.hook_before_job:
+                self.hook_before_job()
+
             exc_info: bool | BaseException = False
 
             async def ensure_async() -> Callable[..., Awaitable]:
@@ -255,6 +266,8 @@ class Worker:
 
         except BaseException as e:
             exc_info = e
+            exc_type = type(e)
+            exc_traceback = e.__traceback__
 
             # aborted job can be retried if it is caused by a shutdown.
             if not (isinstance(e, exceptions.JobAborted)) or (
@@ -274,6 +287,10 @@ class Worker:
                             job_result=job_result,
                         ),
                     )
+
+                self.hook_after_job(exc_type, exc_info, exc_traceback)
+        else:
+            self.hook_after_job(None, None, None)
         finally:
             job_result.end_timestamp = time.time()
 
